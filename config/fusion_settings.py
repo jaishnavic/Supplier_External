@@ -23,6 +23,8 @@ REQUIRED_FIELDS = [
     "DUNSNumber"
 ]
 
+
+
 DEFAULT_VALUES = {
     "BusinessRelationship": "Prospective",
     "OneTimeSupplierFlag": False
@@ -30,12 +32,14 @@ DEFAULT_VALUES = {
 
 FIELD_QUESTIONS = {
     "Supplier": "What is the supplier name?",
-    "TaxOrganizationType": "What is the Tax Organization Type? (defaullt:Corporation)",
-    "SupplierType": "What is the Supplier Type? (Default:Services)",
-    "TaxpayerCountry": "Which country is the taxpayer based in? (Ex:United States)",
-    "TaxpayerId": "Please provide the Taxpayer ID(xx-xxxxxxxx)",
+    "TaxOrganizationType": "What is the Tax Organization Type? (default: Corporation)",
+    "SupplierType": "What is the Supplier Type? (default: Services)",
+    "BusinessRelationship": "What is the Business Relationship? (default: Prospective)",
+    "TaxpayerCountry": "Which country is the taxpayer based in?",
+    "TaxpayerId": "Please provide the Taxpayer ID (xx-xxxxxxxx)",
     "DUNSNumber": "Please provide the 9-digit DUNS Number"
 }
+
 
 FUSION_ALLOWED_VALUES = {
     "TaxOrganizationType": ["Corporation"],
