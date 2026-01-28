@@ -14,7 +14,7 @@ SUPPLIER_ENDPOINT = (
 )
 
 REQUIRED_FIELDS = [
-    "SupplierName",
+    "Supplier",
     "TaxOrganizationType",
     "SupplierType",
     "BusinessRelationship",
@@ -29,7 +29,7 @@ DEFAULT_VALUES = {
 }
 
 FIELD_QUESTIONS = {
-    "SupplierName": "What is the supplier name?",
+    "Supplier": "What is the supplier name?",
     "TaxOrganizationType": "What is the Tax Organization Type? (defaullt:Corporation)",
     "SupplierType": "What is the Supplier Type? (Default:Services)",
     "TaxpayerCountry": "Which country is the taxpayer based in? (Ex:United States)",
@@ -38,5 +38,7 @@ FIELD_QUESTIONS = {
 }
 
 FUSION_ALLOWED_VALUES = {
+    "TaxOrganizationType": ["Corporation"],
+    "SupplierType": ["Services"],
     "BusinessRelationship": ["Prospective"],
     }
