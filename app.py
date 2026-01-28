@@ -18,8 +18,8 @@ security = HTTPBasic()
 
 def authenticate_user(credentials: HTTPBasicCredentials = Depends(security)):
     if (
-        credentials.username == os.getenv("BOT_USERNAME")
-        and credentials.password == os.getenv("BOT_PASSWORD")
+        credentials.username == os.getenv("AGENT_USERNAME")
+        and credentials.password == os.getenv("AGENT_PASSWORD")
     ):
         return credentials.username
     raise HTTPException(status_code=401, detail="Unauthorized")
@@ -34,6 +34,10 @@ class SupplierAgentRequest(BaseModel):
 # Single active session (Agent Studio)
 # -------------------------------
 active_session = None
+
+app.get("/")
+def read_root():
+    return {"status": "Supplier Agent is running."}
 
 
 @app.post("/supplier-agent")
