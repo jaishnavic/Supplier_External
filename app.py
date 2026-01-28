@@ -1,6 +1,5 @@
 from fastapi import FastAPI, HTTPException, Depends
 from pydantic import BaseModel
-import uuid
 import os
 
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
@@ -31,11 +30,14 @@ class SupplierAgentRequest(BaseModel):
     message: str
 
 # -------------------------------
-# Single active session (Agent Studio)
+# Single active session
 # -------------------------------
-active_session = None
+active_session = {
+    "state": "INIT"
+}
 
-app.get("/")
+
+@app.get("/")
 def read_root():
     return {"status": "Supplier Agent is running."}
 
@@ -49,38 +51,86 @@ def supplier_agent(
     user_input = payload.message.strip().lower()
 
     # -------------------------------
-    # INIT SESSION
+    # INIT STATE
     # -------------------------------
-    if not active_session:
+    if active_session["state"] == "INIT":
+        if user_input != "create supplier":
+            return {
+                "reply": 'Type "create supplier" to begin.'
+            }
+
         session = init_session()
-
-        extracted = extract_supplier_payload(payload.message)
-        session = merge_session(session, extracted)
-
-        missing = get_missing_fields(session)
-        current_field = missing[0] if missing else None
-
         active_session = {
+            "state": "COLLECTING",
             "session": session,
-            "current_field": current_field,
-            "state": "COLLECTING"
+            "current_field": REQUIRED_FIELDS[0]
         }
 
-        if current_field:
-            return {"reply": FIELD_QUESTIONS[current_field]}
+        return {
+            "reply": FIELD_QUESTIONS[REQUIRED_FIELDS[0]]
+        }
 
-    state = active_session
-    session = state["session"]
-    current_field = state["current_field"]
-    mode = state["state"]
+    # -------------------------------
+    # LOAD STATE
+    # -------------------------------
+    state = active_session["state"]
+    session = active_session.get("session")
+    current_field = active_session.get("current_field")
+
+    # -------------------------------
+    # COLLECTING MODE
+    # -------------------------------
+    if state == "COLLECTING":
+        session[current_field] = payload.message
+
+        active_session["session"] = session
+        active_session["current_field"] = None
+
+        missing = get_missing_fields(session)
+        if missing:
+            next_field = missing[0]
+            active_session["current_field"] = next_field
+            return {"reply": FIELD_QUESTIONS[next_field]}
+
+        # -------------------------------
+        # VALIDATION
+        # -------------------------------
+        errors = validate_against_fusion(session)
+        if errors:
+            # Map validation error to field
+            invalid_field = errors[0].split(":")[0]
+            active_session["current_field"] = invalid_field
+            return {
+                "reply": (
+                    f"There is an issue with {invalid_field}.\n"
+                    f"{FIELD_QUESTIONS[invalid_field]}"
+                )
+            }
+
+        # -------------------------------
+        # CONFIRM SUMMARY
+        # -------------------------------
+        summary = "\n".join(
+            f"{f}: {session.get(f)}" for f in REQUIRED_FIELDS
+        )
+
+        active_session["state"] = "CONFIRM"
+
+        return {
+            "reply": (
+                "Please review the supplier details:\n\n"
+                + summary +
+                "\n\nType Yes to submit, Edit to change, or Cancel."
+            )
+        }
 
     # -------------------------------
     # CONFIRM MODE
     # -------------------------------
-    if mode == "CONFIRM":
+    if state == "CONFIRM":
         if user_input == "yes":
             status, response = create_supplier(session)
-            active_session = None
+            active_session = {"state": "INIT"}
 
             if status == 201:
                 return {
@@ -91,22 +141,26 @@ def supplier_agent(
                     }
                 }
 
-            return {"status": "ERROR","reply": "Supplier creation failed","details": response}
+            return {
+                "reply": "Supplier creation failed. Please try again."
+            }
 
         if user_input == "edit":
-            state["state"] = "EDIT"
+            active_session["state"] = "EDIT"
             return {
                 "reply": (
-                    "Which field do you want to edit?\n"
-                    + "\n".join(
+                    "Which field do you want to edit?\n" +
+                    "\n".join(
                         f"{i+1}. {f}" for i, f in enumerate(REQUIRED_FIELDS)
                     )
                 )
             }
 
         if user_input == "cancel":
-            active_session = None
-            return {"reply": "Supplier creation cancelled."}
+            active_session = {"state": "INIT"}
+            return {
+                "reply": "Supplier creation cancelled. Type create supplier to begin again."
+            }
 
         return {
             "reply": "Please type Yes, Edit, or Cancel."
@@ -115,74 +169,13 @@ def supplier_agent(
     # -------------------------------
     # EDIT MODE
     # -------------------------------
-    if mode == "EDIT":
+    if state == "EDIT":
         field_map = {str(i + 1): f for i, f in enumerate(REQUIRED_FIELDS)}
 
         if user_input in field_map:
             field = field_map[user_input]
-            state["current_field"] = field
-            state["state"] = "COLLECTING"
+            active_session["state"] = "COLLECTING"
+            active_session["current_field"] = field
             return {"reply": FIELD_QUESTIONS[field]}
 
         return {"reply": "Invalid choice. Please enter a valid number."}
-
-    # -------------------------------
-    # COLLECTING MODE
-    # -------------------------------
-    if current_field:
-        if len(payload.message.split()) > 3:
-            extracted = extract_supplier_payload(payload.message)
-            session = merge_session(session, extracted)
-
-            if not session.get(current_field):
-                session[current_field] = payload.message
-        else:
-            session[current_field] = payload.message
-
-    state["session"] = session
-    state["current_field"] = None
-
-    # -------------------------------
-    # NEXT FIELD
-    # -------------------------------
-    missing = get_missing_fields(session)
-    if missing:
-        next_field = missing[0]
-        state["current_field"] = next_field
-        return {"reply": FIELD_QUESTIONS[next_field]}
-
-    # -------------------------------
-    # VALIDATION
-    # -------------------------------
-    errors = validate_against_fusion(session)
-    if errors:
-        field = REQUIRED_FIELDS[0]
-        state["current_field"] = field
-        return {
-            "reply": (
-                "There are validation issues:\n"
-                + "\n".join(errors)
-                + f"\n\n{FIELD_QUESTIONS[field]}"
-            )
-        }
-
-    # -------------------------------
-    # CONFIRM SUMMARY
-    # -------------------------------
-    summary = "\n".join(
-        f"{f}: {session.get(f)}" for f in REQUIRED_FIELDS
-    )
-
-    state["state"] = "CONFIRM"
-    return {
-        "reply": (
-            "Please review the supplier details:\n\n"
-            + summary
-            + "\n\nType Yes to submit, Edit to change, or Cancel."
-        )
-    }
-
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("app:app", host="0.0.0.0", port=8009)
