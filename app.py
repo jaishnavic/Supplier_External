@@ -4,8 +4,7 @@ import os
 
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
-from gemini_agent import extract_supplier_payload
-from utils.session_manager import init_session, merge_session, get_missing_fields
+from utils.session_manager import init_session, get_missing_fields
 from fusion_validator import validate_against_fusion
 from fusion_client import create_supplier
 from config.fusion_settings import FIELD_QUESTIONS, REQUIRED_FIELDS
@@ -29,7 +28,7 @@ class SupplierAgentRequest(BaseModel):
 
 # ---------------- SESSION ----------------
 active_session = {
-    "state": "INIT"
+    "state": "AWAIT_START"
 }
 
 @app.get("/")
@@ -44,41 +43,34 @@ def supplier_agent(
     global active_session
     user_input = payload.message.strip()
 
-    # -------------------------------------------------
-    # INIT (auto-start, no blocking)
-    # -------------------------------------------------
-    if active_session["state"] == "INIT":
-        session = init_session()
+    # =================================================
+    # AWAIT START
+    # =================================================
+    if active_session["state"] == "AWAIT_START":
+        if user_input.lower() != "create supplier":
+            return {"reply": 'Type "create supplier" to begin.'}
 
+        session = init_session()
         active_session = {
             "state": "COLLECTING",
             "session": session,
             "current_field": REQUIRED_FIELDS[0]
         }
 
-        return {
-            "reply": "Type create supplier to begin."
-        }
+        return {"reply": FIELD_QUESTIONS[REQUIRED_FIELDS[0]]}
 
-    # -------------------------------------------------
+    # =================================================
+    # LOAD STATE
+    # =================================================
     state = active_session["state"]
     session = active_session.get("session")
     current_field = active_session.get("current_field")
 
-    # -------------------------------------------------
-    # START COMMAND
-    # -------------------------------------------------
-    if state == "COLLECTING" and current_field == REQUIRED_FIELDS[0]:
-        if user_input.lower() == "create supplier":
-            return {"reply": FIELD_QUESTIONS[current_field]}
-
-    # -------------------------------------------------
+    # =================================================
     # COLLECTING MODE
-    # -------------------------------------------------
-    if state == "COLLECTING" and current_field:
+    # =================================================
+    if state == "COLLECTING":
         session[current_field] = user_input
-        active_session["session"] = session
-        active_session["current_field"] = None
 
         missing = get_missing_fields(session)
         if missing:
@@ -89,16 +81,11 @@ def supplier_agent(
         # ---------------- VALIDATION ----------------
         errors = validate_against_fusion(session)
         if errors:
-            # Extract field name from error string
-            invalid_field = errors[0].split(" ")[0]
-
+            # expect "FieldName must be ..."
+            invalid_field = errors[0].split()[0]
             active_session["current_field"] = invalid_field
-
             return {
-                "reply": (
-                    f"{errors[0]}\n"
-                    f"{FIELD_QUESTIONS.get(invalid_field, 'Please provide a valid value.')}"
-                )
+                "reply": f"{errors[0]}\n{FIELD_QUESTIONS[invalid_field]}"
             }
 
         # ---------------- CONFIRM ----------------
@@ -107,22 +94,21 @@ def supplier_agent(
         )
 
         active_session["state"] = "CONFIRM"
-
         return {
             "reply": (
-                "Please confirm supplier creation:\n\n"
+                "Please review the supplier details:\n\n"
                 + summary +
                 "\n\nType Yes, Edit, or Cancel."
             )
         }
 
-    # -------------------------------------------------
+    # =================================================
     # CONFIRM MODE
-    # -------------------------------------------------
+    # =================================================
     if state == "CONFIRM":
         if user_input.lower() == "yes":
             status, response = create_supplier(session)
-            active_session = {"state": "INIT"}
+            active_session = {"state": "AWAIT_START"}
 
             if status == 201:
                 return {
@@ -139,7 +125,7 @@ def supplier_agent(
             active_session["state"] = "EDIT"
             return {
                 "reply": (
-                    "Select field number to edit:\n" +
+                    "Which field do you want to edit?\n" +
                     "\n".join(
                         f"{i+1}. {f}" for i, f in enumerate(REQUIRED_FIELDS)
                     )
@@ -147,14 +133,14 @@ def supplier_agent(
             }
 
         if user_input.lower() == "cancel":
-            active_session = {"state": "INIT"}
+            active_session = {"state": "AWAIT_START"}
             return {"reply": "Supplier creation cancelled."}
 
-        return {"reply": "Please respond with Yes, Edit, or Cancel."}
+        return {"reply": "Please type Yes, Edit, or Cancel."}
 
-    # -------------------------------------------------
+    # =================================================
     # EDIT MODE
-    # -------------------------------------------------
+    # =================================================
     if state == "EDIT":
         field_map = {str(i + 1): f for i, f in enumerate(REQUIRED_FIELDS)}
 
