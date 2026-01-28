@@ -64,6 +64,10 @@ def in_progress_response(session_id: str, reply: str):
     }
 
 
+@app.get("/")
+def read_root():
+    return {"message": "Supplier Agent is running."}
+
 
 @app.post("/supplier-agent")
 def supplier_agent(payload: SupplierAgentRequest, username: str = Depends(authenticate_user)):
