@@ -45,7 +45,7 @@ def supplier_agent(
     # INIT
     # -------------------------------------------------
     if active_session["state"] == "INIT":
-        if user_input.lower() != "create supplier":
+        if "create supplier" not in user_input.lower():
             return {"reply": 'Type "create supplier" to begin.'}
 
         session = init_session()
