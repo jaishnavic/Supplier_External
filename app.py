@@ -89,12 +89,15 @@ def supplier_agent(
         # ---------------- VALIDATION ----------------
         errors = validate_against_fusion(session)
         if errors:
-            invalid_field = errors[0]["field"]
+            # Extract field name from error string
+            invalid_field = errors[0].split(" ")[0]
+
             active_session["current_field"] = invalid_field
+
             return {
                 "reply": (
-                    f"Invalid value provided.\n"
-                    f"{FIELD_QUESTIONS[invalid_field]}"
+                    f"{errors[0]}\n"
+                    f"{FIELD_QUESTIONS.get(invalid_field, 'Please provide a valid value.')}"
                 )
             }
 
