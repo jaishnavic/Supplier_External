@@ -39,7 +39,8 @@ def supplier_agent(
     username: str = Depends(authenticate_user)
 ):
     global active_session
-    user_input = payload.message.strip()
+    user_input = payload.message.strip().strip("{}")
+
 
     # -------------------------------------------------
     # INIT
@@ -83,6 +84,11 @@ def supplier_agent(
             return {"reply": FIELD_QUESTIONS[next_field]}
 
         # All fields collected → VALIDATE
+        # Normalize all session values before validation
+        for field in session:
+            if isinstance(session[field], str):
+                session[field] = session[field].strip().strip("{}")
+
         errors = validate_against_fusion(session)
         if errors:
             invalid_field = errors[0].split(" ")[0]
