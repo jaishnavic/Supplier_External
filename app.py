@@ -28,12 +28,14 @@ class SupplierAgentRequest(BaseModel):
 
 # ---------------- SESSION ----------------
 active_session = {
-    "state": "AWAIT_START"
+    "state": "INIT"
 }
 
 @app.get("/")
 def read_root():
     return {"status": "Supplier Agent is running."}
+
+
 
 @app.post("/supplier-agent")
 def supplier_agent(
@@ -43,21 +45,26 @@ def supplier_agent(
     global active_session
     user_input = payload.message.strip()
 
-    # =================================================
-    # AWAIT START
-    # =================================================
-    if active_session["state"] == "AWAIT_START":
+    # -------------------------------------------------
+    # INIT STATE
+    # -------------------------------------------------
+    if active_session["state"] == "INIT":
         if user_input.lower() != "create supplier":
-            return {"reply": 'Type "create supplier" to begin.'}
+            return {
+                "reply": "To begin, please type: create supplier"
+            }
 
         session = init_session()
+
         active_session = {
             "state": "COLLECTING",
             "session": session,
             "current_field": REQUIRED_FIELDS[0]
         }
 
-        return {"reply": FIELD_QUESTIONS[REQUIRED_FIELDS[0]]}
+        return {
+            "reply": FIELD_QUESTIONS[REQUIRED_FIELDS[0]]
+        }
 
     # =================================================
     # LOAD STATE
@@ -66,39 +73,36 @@ def supplier_agent(
     session = active_session.get("session")
     current_field = active_session.get("current_field")
 
-    # =================================================
+    # -------------------------------------------------
     # COLLECTING MODE
-    # =================================================
-    if state == "COLLECTING":
+    # -------------------------------------------------
+    if state == "COLLECTING" and current_field:
         session[current_field] = user_input
+        active_session["session"] = session
 
         missing = get_missing_fields(session)
+
         if missing:
             next_field = missing[0]
             active_session["current_field"] = next_field
             return {"reply": FIELD_QUESTIONS[next_field]}
 
-        # ---------------- VALIDATION ----------------
-        errors = validate_against_fusion(session)
-        if errors:
-            # expect "FieldName must be ..."
-            invalid_field = errors[0].split()[0]
-            active_session["current_field"] = invalid_field
-            return {
-                "reply": f"{errors[0]}\n{FIELD_QUESTIONS[invalid_field]}"
-            }
+        # ALL FIELDS COLLECTED → MOVE TO CONFIRM
+        active_session["state"] = "CONFIRM"
+        active_session["current_field"] = None
 
-        # ---------------- CONFIRM ----------------
         summary = "\n".join(
-            f"{f}: {session.get(f)}" for f in REQUIRED_FIELDS
+            f"- {f}: {session.get(f)}" for f in REQUIRED_FIELDS
         )
 
-        active_session["state"] = "CONFIRM"
         return {
             "reply": (
-                "Please review the supplier details:\n\n"
-                + summary +
-                "\n\nType Yes, Edit, or Cancel."
+                "Here is the supplier information you provided:\n\n"
+                f"{summary}\n\n"
+                "Please confirm:\n"
+                "• Type **Yes** to create supplier\n"
+                "• Type **Edit** to modify a field\n"
+                "• Type **Cancel** to abort"
             )
         }
 
@@ -107,19 +111,33 @@ def supplier_agent(
     # =================================================
     if state == "CONFIRM":
         if user_input.lower() == "yes":
+            errors = validate_against_fusion(session)
+
+            if errors:
+                error_msg = "\n".join(f"- {e}" for e in errors)
+                active_session["state"] = "CONFIRM"
+                return {
+                    "reply": (
+                        "There are validation issues:\n\n"
+                        f"{error_msg}\n\n"
+                        "Type Edit to correct or Cancel."
+                    )
+                }
+
             status, response = create_supplier(session)
-            active_session = {"state": "AWAIT_START"}
+            active_session = {"state": "INIT"}
 
             if status == 201:
                 return {
-                    "reply": "Supplier created successfully.",
+                    "reply": "✅ Supplier created successfully.",
                     "data": {
                         "SupplierId": response.get("SupplierId"),
                         "SupplierNumber": response.get("SupplierNumber")
                     }
                 }
 
-            return {"reply": "Supplier creation failed."}
+            return {"reply": "❌ Supplier creation failed in Fusion."}
+
 
         if user_input.lower() == "edit":
             active_session["state"] = "EDIT"
