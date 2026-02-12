@@ -24,7 +24,6 @@ REQUIRED_FIELDS = [
 ]
 
 
-
 DEFAULT_VALUES = {
     "BusinessRelationship": "Prospective",
     "OneTimeSupplierFlag": False,
