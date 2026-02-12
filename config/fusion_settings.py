@@ -27,7 +27,9 @@ REQUIRED_FIELDS = [
 
 DEFAULT_VALUES = {
     "BusinessRelationship": "Prospective",
-    "OneTimeSupplierFlag": False
+    "OneTimeSupplierFlag": False,
+    "TaxOrganizationType": "Corporation",
+    "SupplierType": "Services"
 }
 
 FIELD_QUESTIONS = {

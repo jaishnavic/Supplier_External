@@ -166,3 +166,8 @@ def supplier_agent(
             return {"reply": FIELD_QUESTIONS[field]}
 
         return {"reply": "Invalid choice. Enter a valid field number."}
+    
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("app:app", host="0.0.0.0", port=8006, reload=True)
